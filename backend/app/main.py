@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -66,6 +67,7 @@ def health():
             "service": settings.app_name,
             "env": settings.environment,
             "db_mode": db_mode,
+            "render_runtime": bool(os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER") == "true"),
             "time_utc": datetime.now(timezone.utc).isoformat(),
         }
     )

@@ -24,6 +24,25 @@ class Settings:
     gemini_timeout_seconds: int
 
 
+def _is_render_runtime() -> bool:
+    return any(
+        [
+            (os.getenv("RENDER", "").strip().lower() == "true"),
+            bool(os.getenv("RENDER_SERVICE_ID", "").strip()),
+            bool(os.getenv("RENDER_INSTANCE_ID", "").strip()),
+        ]
+    )
+
+
+def _default_app_env() -> str:
+    explicit = os.getenv("APP_ENV", "").strip()
+    if explicit:
+        return explicit
+    if _is_render_runtime():
+        return "production"
+    return "development"
+
+
 def _validate_settings(settings: Settings) -> None:
     env = (settings.environment or "").strip().lower()
     is_production = env in {"production", "prod"}
@@ -60,7 +79,7 @@ def get_settings() -> Settings:
 
     settings = Settings(
         app_name=os.getenv("APP_NAME", "Receiper Cloud"),
-        environment=os.getenv("APP_ENV", "development"),
+        environment=_default_app_env(),
         database_url=_normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./data/receiper.db")),
         jwt_secret=os.getenv("JWT_SECRET", "change-me-in-production"),
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
