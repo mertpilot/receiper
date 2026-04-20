@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Receiper Cloud Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <title>Receiper Panel</title>
     <style>
       :root {
-        --bg: #eff4f8;
-        --card: #ffffff;
-        --ink: #10202f;
-        --muted: #5d6c7a;
-        --line: #d5e0e8;
-        --brand: #0d9382;
-        --brand-dark: #0a7265;
-        --danger: #c23939;
+        --bg: #f2f6fb;
+        --surface: #ffffff;
+        --surface-soft: #f8fbff;
+        --ink: #0b1b2b;
+        --muted: #5b6f82;
+        --line: #dbe5ef;
+        --brand: #0d7f72;
+        --brand-ink: #0a5d55;
+        --danger: #c93e3e;
+        --ok: #168b55;
       }
 
       * {
@@ -24,98 +24,177 @@
 
       body {
         margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        background: radial-gradient(circle at top right, #d4efe9 0, var(--bg) 45%);
+        font-family: "Sora", "Segoe UI", Arial, sans-serif;
         color: var(--ink);
+        background:
+          radial-gradient(1200px 500px at 110% -10%, #d6f0ea 0%, transparent 55%),
+          radial-gradient(900px 420px at -20% 0%, #e5eefb 0%, transparent 50%),
+          var(--bg);
       }
 
-      .wrap {
-        width: min(1320px, 95vw);
-        margin: 18px auto 36px;
+      .shell {
+        width: min(1320px, 94vw);
+        margin: 24px auto 32px;
       }
 
       .card {
-        background: var(--card);
+        background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 14px;
-        box-shadow: 0 12px 28px rgba(11, 27, 41, 0.08);
-        padding: 14px;
+        border-radius: 18px;
+        box-shadow: 0 12px 36px rgba(16, 38, 61, 0.08);
       }
 
-      h1 {
+      .hidden {
+        display: none !important;
+      }
+
+      .auth-wrap {
+        min-height: calc(100vh - 56px);
+        display: grid;
+        place-items: center;
+      }
+
+      .auth-card {
+        width: min(520px, 94vw);
+        padding: 26px;
+      }
+
+      .brand {
+        font-size: clamp(2rem, 4.2vw, 2.8rem);
+        font-weight: 800;
+        letter-spacing: 0.02em;
         margin: 0;
-        font-size: 1.7rem;
       }
 
       .sub {
-        margin: 6px 0 14px;
+        margin: 8px 0 22px;
         color: var(--muted);
+        font-size: 0.96rem;
       }
 
-      .status {
-        margin: 8px 0 0;
-        color: var(--muted);
-      }
-
-      .status.error {
-        color: var(--danger);
-      }
-
-      .auth-grid {
+      .mode-switch {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        gap: 8px;
+        margin-bottom: 14px;
       }
 
-      .input {
-        width: 100%;
+      .mode-btn {
         border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 10px;
-        margin-bottom: 8px;
-      }
-
-      button {
-        border: 0;
-        background: var(--brand);
-        color: #fff;
-        border-radius: 10px;
+        background: var(--surface-soft);
+        color: #1d3246;
+        border-radius: 12px;
         padding: 10px 12px;
         font-weight: 700;
         cursor: pointer;
       }
 
-      button:hover {
-        background: var(--brand-dark);
+      .mode-btn.active {
+        background: var(--brand);
+        color: #fff;
+        border-color: var(--brand);
       }
 
-      button.secondary {
-        background: #556a79;
+      .field {
+        margin-bottom: 10px;
       }
 
-      button.secondary:hover {
-        background: #445664;
+      .label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.86rem;
+        color: #395069;
+        font-weight: 700;
       }
 
-      .hidden {
-        display: none;
+      .input {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 12px;
+        padding: 11px 12px;
+        font-size: 0.94rem;
+        color: var(--ink);
       }
 
-      .topbar {
+      .input:focus {
+        outline: none;
+        border-color: #a2c6e0;
+        box-shadow: 0 0 0 3px rgba(38, 125, 194, 0.15);
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 13px;
+        font-weight: 800;
+        cursor: pointer;
+        font-size: 0.92rem;
+      }
+
+      .btn.primary {
+        width: 100%;
+        margin-top: 4px;
+        background: var(--brand);
+        color: #fff;
+      }
+
+      .btn.primary:hover {
+        background: var(--brand-ink);
+      }
+
+      .status {
+        margin-top: 10px;
+        min-height: 20px;
+        color: var(--muted);
+      }
+
+      .status.err {
+        color: var(--danger);
+      }
+
+      .status.ok {
+        color: var(--ok);
+      }
+
+      .app {
+        padding: 18px;
+      }
+
+      .top {
         display: flex;
-        gap: 8px;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
         flex-wrap: wrap;
+      }
+
+      .title {
+        margin: 0;
+        font-size: clamp(1.6rem, 2.8vw, 2.3rem);
+        font-weight: 800;
+      }
+
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
       }
 
       .chip {
         border: 1px solid var(--line);
-        background: #f4f9fc;
+        background: var(--surface-soft);
         border-radius: 999px;
-        padding: 6px 10px;
-        color: #385269;
-        font-size: 0.86rem;
+        padding: 7px 12px;
+        font-size: 0.84rem;
+        color: #355068;
+        font-weight: 700;
       }
 
       .actions {
@@ -124,218 +203,254 @@
         flex-wrap: wrap;
       }
 
-      .grid {
-        margin-top: 10px;
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        gap: 10px;
+      .btn.soft {
+        background: #eef4fb;
+        color: #27425b;
+        border: 1px solid #d3e0ee;
       }
 
-      .pair-box {
+      .btn.soft:hover {
+        background: #e3edf8;
+      }
+
+      .btn.exit {
+        background: #1d2d3c;
+        color: #fff;
+      }
+
+      .btn.exit:hover {
+        background: #13212d;
+      }
+
+      .grid-card {
+        margin-top: 14px;
         border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 10px;
-        background: #f9fcfe;
-      }
-
-      .pair-code {
-        font-size: 1.7rem;
-        font-weight: 800;
-        letter-spacing: 2px;
-      }
-
-      #qrCanvas {
-        width: 210px;
-        height: 210px;
-        border: 1px dashed #b5c7d5;
-        border-radius: 10px;
+        border-radius: 14px;
+        background: #fff;
+        overflow: hidden;
       }
 
       .table-wrap {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #fff;
         overflow: auto;
-        max-height: 68vh;
+        max-height: 72vh;
       }
 
       table {
-        border-collapse: collapse;
-        min-width: 1450px;
         width: 100%;
+        border-collapse: collapse;
+        min-width: 1460px;
+      }
+
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f3f8fe;
+        color: #193149;
+        border-bottom: 1px solid #dce7f1;
+        font-size: 0.82rem;
+        letter-spacing: 0.01em;
       }
 
       th,
       td {
-        border-bottom: 1px solid #e4edf4;
-        border-right: 1px solid #edf3f8;
-        padding: 8px;
+        padding: 9px 10px;
         text-align: left;
         white-space: nowrap;
+        border-bottom: 1px solid #edf3f8;
+        border-right: 1px solid #edf3f8;
         font-size: 0.84rem;
       }
 
-      th {
-        position: sticky;
-        top: 0;
-        background: #edf5fb;
-        z-index: 2;
+      tr:hover td {
+        background: #f8fcff;
       }
 
-      tr.flash {
-        animation: flash 1.4s ease;
-      }
-
-      @keyframes flash {
-        0% {
-          background: #d8fff0;
-        }
-        100% {
-          background: transparent;
-        }
-      }
-
-      .hint {
+      .empty {
+        padding: 34px 18px;
+        text-align: center;
         color: var(--muted);
-        font-size: 0.85rem;
+        font-weight: 600;
       }
 
-      @media (max-width: 1080px) {
-        .auth-grid,
-        .grid {
-          grid-template-columns: 1fr;
+      #toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        max-width: 360px;
+        background: #0f1f2e;
+        color: #fff;
+        border-radius: 12px;
+        padding: 11px 13px;
+        box-shadow: 0 12px 28px rgba(4, 14, 24, 0.35);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: all 0.25s ease;
+        pointer-events: none;
+        font-weight: 600;
+      }
+
+      #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      @media (max-width: 920px) {
+        .app {
+          padding: 14px;
         }
       }
     </style>
   </head>
   <body>
-    <main class="wrap">
-      <section class="card">
-        <h1>Receiper Cloud Dashboard</h1>
-        <p class="sub">Mobil uygulamadan gelen fişler anlık olarak bu online tabloya düşer.</p>
+    <div class="shell">
+      <section id="authView" class="auth-wrap">
+        <div class="auth-card card">
+          <h1 class="brand">Receiper</h1>
+          <p class="sub">Sadece giriş yaptığın hesaba ait fiş kayıtları görüntülenir.</p>
 
-        <div id="authView">
-          <div class="auth-grid">
-            <div class="card">
-              <h3>Giris Yap</h3>
-              <input class="input" id="loginEmail" placeholder="Email" />
-              <input class="input" id="loginPassword" type="password" placeholder="Sifre" />
-              <button id="loginBtn">Giris</button>
-            </div>
-            <div class="card">
-              <h3>Kayit Ol</h3>
-              <input class="input" id="registerName" placeholder="Ad Soyad" />
-              <input class="input" id="registerEmail" placeholder="Email" />
-              <input class="input" id="registerPassword" type="password" placeholder="Sifre (min 6)" />
-              <button id="registerBtn">Kayit Ol ve Giris Yap</button>
-            </div>
+          <div class="mode-switch">
+            <button class="mode-btn active" id="modeLogin">Giriş Yap</button>
+            <button class="mode-btn" id="modeRegister">Kayıt Ol</button>
           </div>
+
+          <div id="registerNameField" class="field hidden">
+            <label class="label" for="registerName">Ad Soyad</label>
+            <input class="input" id="registerName" autocomplete="name" />
+          </div>
+
+          <div class="field">
+            <label class="label" for="authEmail">E-posta</label>
+            <input class="input" id="authEmail" autocomplete="email" />
+          </div>
+
+          <div class="field">
+            <label class="label" for="authPassword">Şifre</label>
+            <input class="input" id="authPassword" type="password" autocomplete="current-password" />
+          </div>
+
+          <button id="submitAuth" class="btn primary">Giriş Yap</button>
           <p id="authStatus" class="status"></p>
         </div>
+      </section>
 
-        <div id="appView" class="hidden">
-          <div class="topbar">
-            <div>
-              <span class="chip" id="userChip">-</span>
-              <span class="chip" id="wsChip">WS: baglanti bekleniyor</span>
-              <span class="chip" id="countChip">Kayit: 0</span>
-            </div>
-            <div class="actions">
-              <button id="refreshBtn" class="secondary">Yenile</button>
-              <button id="pairBtn">Mobil Eslestirme Kodu Olustur</button>
-              <button id="exportBtn" class="secondary">Excel'e Aktar</button>
-              <button id="logoutBtn" class="secondary">Cikis</button>
+      <section id="appView" class="card app hidden">
+        <div class="top">
+          <div>
+            <h2 class="title">Receiper Panel</h2>
+            <p class="muted">Mobilden gönderilen fişler bu tabloda canlı görünür.</p>
+            <div class="chips">
+              <span class="chip" id="userChip">Kullanıcı: -</span>
+              <span class="chip" id="wsChip">Canlı: Bağlanıyor</span>
+              <span class="chip" id="countChip">Kayıt: 0</span>
             </div>
           </div>
 
-          <div class="grid">
-            <div class="pair-box">
-              <h3>Mobil Eslestirme</h3>
-              <p class="hint">Mobil uygulama login olduktan sonra bu kod veya QR ile web oturumu ile eslestir.</p>
-              <div class="pair-code" id="pairCode">------</div>
-              <p class="hint" id="pairExpire">Suresi: -</p>
-              <canvas id="qrCanvas"></canvas>
-            </div>
+          <div class="actions">
+            <button id="refreshBtn" class="btn soft">Yenile</button>
+            <button id="exportBtn" class="btn soft">Excel'e Aktar</button>
+            <button id="logoutBtn" class="btn exit">Çıkış</button>
+          </div>
+        </div>
 
-            <div>
-              <div class="table-wrap">
-                <table id="sheetTable">
-                  <thead>
-                    <tr>
-                      <th>Islem Zamani</th>
-                      <th>Kod</th>
-                      <th>Hesap Kodu</th>
-                      <th>Evrak Tarihi</th>
-                      <th>Evrak No</th>
-                      <th>Vergi / TC No</th>
-                      <th>Gider Aciklama</th>
-                      <th>KDV%</th>
-                      <th>Alinan Mal/Masraf</th>
-                      <th>Ind.KDV</th>
-                      <th>Toplam</th>
-                      <th>Isletme</th>
-                      <th>Odeme Tipi</th>
-                      <th>Cihaz</th>
-                    </tr>
-                  </thead>
-                  <tbody id="sheetBody"></tbody>
-                </table>
-              </div>
-              <p id="appStatus" class="status">Hazir.</p>
-            </div>
+        <p id="appStatus" class="status"></p>
+
+        <div class="grid-card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>İşlem Zamanı</th>
+                  <th>Kod</th>
+                  <th>Hesap Kodu</th>
+                  <th>Evrak Tarihi</th>
+                  <th>Evrak No</th>
+                  <th>Vergi / TC No</th>
+                  <th>Gider Açıklama</th>
+                  <th>KDV%</th>
+                  <th>Alınan Mal/Masraf</th>
+                  <th>İnd.KDV</th>
+                  <th>Toplam</th>
+                  <th>İşletme</th>
+                  <th>Ödeme Tipi</th>
+                </tr>
+              </thead>
+              <tbody id="sheetBody"></tbody>
+            </table>
+            <div id="emptyState" class="empty">Henüz fiş kaydı yok.</div>
           </div>
         </div>
       </section>
-    </main>
+    </div>
+
+    <div id="toast"></div>
 
     <script>
+      const state = {
+        authMode: "login",
+        token: localStorage.getItem("receiper_token") || "",
+        rows: [],
+        ws: null,
+        wsRetryTimer: null,
+      };
+
       const authView = document.getElementById("authView");
       const appView = document.getElementById("appView");
+      const modeLogin = document.getElementById("modeLogin");
+      const modeRegister = document.getElementById("modeRegister");
+      const registerNameField = document.getElementById("registerNameField");
+      const submitAuth = document.getElementById("submitAuth");
       const authStatus = document.getElementById("authStatus");
       const appStatus = document.getElementById("appStatus");
-      const sheetBody = document.getElementById("sheetBody");
-      const wsChip = document.getElementById("wsChip");
       const userChip = document.getElementById("userChip");
+      const wsChip = document.getElementById("wsChip");
       const countChip = document.getElementById("countChip");
-      const pairCodeEl = document.getElementById("pairCode");
-      const pairExpireEl = document.getElementById("pairExpire");
-      const qrCanvas = document.getElementById("qrCanvas");
+      const sheetBody = document.getElementById("sheetBody");
+      const emptyState = document.getElementById("emptyState");
+      const toast = document.getElementById("toast");
 
-      let token = localStorage.getItem("receiper_token") || "";
-      let ws = null;
-      let rows = [];
-
-      function setStatus(el, msg, isError = false) {
-        el.textContent = msg;
-        el.classList.toggle("error", isError);
+      function setStatus(target, message, type = "") {
+        target.textContent = message || "";
+        target.classList.remove("err", "ok");
+        if (type) {
+          target.classList.add(type);
+        }
       }
 
-      async function api(path, options = {}) {
-        const headers = { ...(options.headers || {}) };
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-
-        const response = await fetch(path, { ...options, headers });
-        let data = {};
-        try {
-          data = await response.json();
-        } catch (_) {}
-
-        if (!response.ok) {
-          throw new Error(data.detail || `HTTP ${response.status}`);
-        }
-        return data;
+      function setAuthMode(mode) {
+        state.authMode = mode;
+        const register = mode === "register";
+        registerNameField.classList.toggle("hidden", !register);
+        modeLogin.classList.toggle("active", !register);
+        modeRegister.classList.toggle("active", register);
+        submitAuth.textContent = register ? "Kayıt Ol" : "Giriş Yap";
+        setStatus(authStatus, "");
       }
 
-      function showApp() {
+      function showAuthView() {
+        authView.classList.remove("hidden");
+        appView.classList.add("hidden");
+      }
+
+      function showAppView() {
         authView.classList.add("hidden");
         appView.classList.remove("hidden");
       }
 
-      function showAuth() {
-        appView.classList.add("hidden");
-        authView.classList.remove("hidden");
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function formatDateTime(value) {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "-";
+        return date.toLocaleString("tr-TR");
       }
 
       function formatMoney(value) {
@@ -346,197 +461,256 @@
       }
 
       function renderRows() {
-        countChip.textContent = `Kayit: ${rows.length}`;
-        sheetBody.innerHTML = rows
+        countChip.textContent = `Kayıt: ${state.rows.length}`;
+        emptyState.style.display = state.rows.length ? "none" : "block";
+        sheetBody.innerHTML = state.rows
           .map(
             (r) => `
             <tr>
-              <td>${new Date(r.uploaded_at).toLocaleString("tr-TR")}</td>
-              <td>${r.kod || "-"}</td>
-              <td>${r.hesap_kodu || "-"}</td>
-              <td>${r.evrak_tarihi_text || "-"}</td>
-              <td>${r.evrak_no || "-"}</td>
-              <td>${r.vergi_tc_no || "-"}</td>
-              <td>${r.gider_aciklama || "-"}</td>
-              <td>${r.kdv_orani ?? "-"}</td>
-              <td>${formatMoney(r.alinan_mal_masraf)}</td>
-              <td>${formatMoney(r.ind_kdv)}</td>
-              <td>${formatMoney(r.toplam)}</td>
-              <td>${r.merchant || "-"}</td>
-              <td>${r.payment_type || "-"}</td>
-              <td>${r.device_id || "-"}</td>
+              <td>${escapeHtml(formatDateTime(r.uploaded_at))}</td>
+              <td>${escapeHtml(r.kod || "-")}</td>
+              <td>${escapeHtml(r.hesap_kodu || "-")}</td>
+              <td>${escapeHtml(r.evrak_tarihi_text || "-")}</td>
+              <td>${escapeHtml(r.evrak_no || "-")}</td>
+              <td>${escapeHtml(r.vergi_tc_no || "-")}</td>
+              <td>${escapeHtml(r.gider_aciklama || "-")}</td>
+              <td>${escapeHtml(r.kdv_orani ?? "-")}</td>
+              <td>${escapeHtml(formatMoney(r.alinan_mal_masraf))}</td>
+              <td>${escapeHtml(formatMoney(r.ind_kdv))}</td>
+              <td>${escapeHtml(formatMoney(r.toplam))}</td>
+              <td>${escapeHtml(r.merchant || "-")}</td>
+              <td>${escapeHtml(r.payment_type || "-")}</td>
             </tr>`
           )
           .join("");
       }
 
-      function prependRow(row) {
-        rows.unshift(row);
-        renderRows();
-        if (sheetBody.firstElementChild) {
-          sheetBody.firstElementChild.classList.add("flash");
-        }
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(() => {
+          toast.classList.remove("show");
+        }, 2300);
       }
 
-      async function loadReceipts() {
-        const data = await api("/api/receipts?limit=500");
-        rows = data.items || [];
-        renderRows();
+      async function api(path, options = {}) {
+        const headers = { ...(options.headers || {}) };
+        if (state.token) {
+          headers.Authorization = `Bearer ${state.token}`;
+        }
+        const response = await fetch(path, { ...options, headers });
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (_) {}
+        if (!response.ok) {
+          throw new Error(data.detail || `HTTP ${response.status}`);
+        }
+        return data;
       }
 
       async function loadMe() {
         const me = await api("/api/auth/me");
-        userChip.textContent = `${me.full_name || "Kullanici"} (${me.email})`;
+        const identity = me.full_name ? `${me.full_name} (${me.email})` : me.email;
+        userChip.textContent = `Kullanıcı: ${identity}`;
+      }
+
+      async function loadReceipts() {
+        const list = await api("/api/receipts?limit=500");
+        state.rows = Array.isArray(list.items) ? list.items : [];
+        renderRows();
+      }
+
+      function disconnectWs() {
+        if (state.wsRetryTimer) {
+          clearTimeout(state.wsRetryTimer);
+          state.wsRetryTimer = null;
+        }
+        if (state.ws) {
+          state.ws.onclose = null;
+          state.ws.close();
+          state.ws = null;
+        }
       }
 
       function connectWs() {
-        if (!token) return;
-        if (ws) ws.close();
+        disconnectWs();
+        if (!state.token) return;
 
-        const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
-        ws = new WebSocket(`${wsProtocol}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        const socket = new WebSocket(`${protocol}//${location.host}/ws?token=${encodeURIComponent(state.token)}`);
+        state.ws = socket;
+        wsChip.textContent = "Canlı: Bağlanıyor";
 
-        ws.onopen = () => {
-          wsChip.textContent = "WS: bagli";
+        socket.onopen = () => {
+          wsChip.textContent = "Canlı: Bağlı";
         };
 
-        ws.onclose = () => {
-          wsChip.textContent = "WS: koptu, tekrar baglaniliyor...";
-          setTimeout(connectWs, 2000);
-        };
-
-        ws.onmessage = (event) => {
+        socket.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
             if (payload.event === "receipt.created" && payload.receipt) {
-              prependRow(payload.receipt);
-              setStatus(appStatus, "Yeni fis satiri geldi.");
+              state.rows.unshift(payload.receipt);
+              renderRows();
+              setStatus(appStatus, "Yeni fiş eklendi.", "ok");
+              showToast("Yeni fiş kaydı geldi");
             }
           } catch (_) {}
         };
+
+        socket.onclose = () => {
+          wsChip.textContent = "Canlı: Kesildi";
+          if (!state.token) return;
+          state.wsRetryTimer = setTimeout(connectWs, 2500);
+        };
+
+        socket.onerror = () => {
+          wsChip.textContent = "Canlı: Hata";
+        };
       }
 
-      async function generatePairCode() {
-        const result = await api("/api/pairing-codes", { method: "POST" });
-        pairCodeEl.textContent = result.code;
-        pairExpireEl.textContent = `Suresi: ${new Date(result.expires_at).toLocaleTimeString("tr-TR")}`;
-        QRCode.toCanvas(qrCanvas, result.pairing_uri, { width: 210, margin: 1 });
+      function toCsvValue(value) {
+        const raw = String(value ?? "");
+        if (raw.includes(";") || raw.includes('"') || raw.includes("\n")) {
+          return `"${raw.replaceAll('"', '""')}"`;
+        }
+        return raw;
       }
 
-      function exportExcel() {
-        const exportRows = rows.map((r) => ({
-          IslemZamani: new Date(r.uploaded_at).toLocaleString("tr-TR"),
-          Kod: r.kod,
-          HesapKodu: r.hesap_kodu,
-          EvrakTarihi: r.evrak_tarihi_text,
-          EvrakNo: r.evrak_no,
-          VergiTCNo: r.vergi_tc_no,
-          GiderAciklama: r.gider_aciklama,
-          KDV: r.kdv_orani,
-          AlinanMalMasraf: r.alinan_mal_masraf,
-          IndKDV: r.ind_kdv,
-          Toplam: r.toplam,
-          Isletme: r.merchant,
-          OdemeTipi: r.payment_type,
-          Cihaz: r.device_id,
-        }));
+      function exportExcelLikeCsv() {
+        const headers = [
+          "İşlem Zamanı",
+          "Kod",
+          "Hesap Kodu",
+          "Evrak Tarihi",
+          "Evrak No",
+          "Vergi / TC No",
+          "Gider Açıklama",
+          "KDV%",
+          "Alınan Mal/Masraf",
+          "İnd.KDV",
+          "Toplam",
+          "İşletme",
+          "Ödeme Tipi",
+        ];
 
-        const wsBook = XLSX.utils.book_new();
-        const wsSheet = XLSX.utils.json_to_sheet(exportRows);
-        XLSX.utils.book_append_sheet(wsBook, wsSheet, "Receiper");
-        XLSX.writeFile(wsBook, `receiper-${Date.now()}.xlsx`);
+        const rows = state.rows.map((r) => [
+          formatDateTime(r.uploaded_at),
+          r.kod || "",
+          r.hesap_kodu || "",
+          r.evrak_tarihi_text || "",
+          r.evrak_no || "",
+          r.vergi_tc_no || "",
+          r.gider_aciklama || "",
+          r.kdv_orani ?? "",
+          formatMoney(r.alinan_mal_masraf),
+          formatMoney(r.ind_kdv),
+          formatMoney(r.toplam),
+          r.merchant || "",
+          r.payment_type || "",
+        ]);
+
+        const lines = [headers, ...rows].map((line) => line.map(toCsvValue).join(";")).join("\n");
+        const blob = new Blob(["\uFEFF" + lines], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `receiper-${Date.now()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       }
 
-      document.getElementById("loginBtn").addEventListener("click", async () => {
+      async function submitAuthForm() {
+        const email = document.getElementById("authEmail").value.trim();
+        const password = document.getElementById("authPassword").value;
+        const fullName = document.getElementById("registerName").value.trim();
+
+        if (!email || !password) {
+          setStatus(authStatus, "E-posta ve şifre zorunlu.", "err");
+          return;
+        }
+
+        if (state.authMode === "register" && !fullName) {
+          setStatus(authStatus, "Kayıt için ad soyad zorunlu.", "err");
+          return;
+        }
+
+        submitAuth.disabled = true;
+        setStatus(authStatus, state.authMode === "register" ? "Kayıt oluşturuluyor..." : "Giriş yapılıyor...");
+
         try {
-          const payload = {
-            email: document.getElementById("loginEmail").value.trim(),
-            password: document.getElementById("loginPassword").value,
-          };
-          const data = await api("/api/auth/login", {
+          const endpoint = state.authMode === "register" ? "/api/auth/register" : "/api/auth/login";
+          const payload =
+            state.authMode === "register"
+              ? { email, password, full_name: fullName }
+              : { email, password };
+
+          const result = await api(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
-          token = data.access_token;
-          localStorage.setItem("receiper_token", token);
-          setStatus(authStatus, "Giris basarili");
-          await bootstrapApp();
-        } catch (error) {
-          setStatus(authStatus, `Giris hatasi: ${error.message}`, true);
-        }
-      });
 
-      document.getElementById("registerBtn").addEventListener("click", async () => {
-        try {
-          const payload = {
-            full_name: document.getElementById("registerName").value.trim(),
-            email: document.getElementById("registerEmail").value.trim(),
-            password: document.getElementById("registerPassword").value,
-          };
-          const data = await api("/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          token = data.access_token;
-          localStorage.setItem("receiper_token", token);
-          setStatus(authStatus, "Kayit basarili");
-          await bootstrapApp();
+          state.token = result.access_token || "";
+          localStorage.setItem("receiper_token", state.token);
+          showAppView();
+          await loadMe();
+          await loadReceipts();
+          connectWs();
+          setStatus(appStatus, "Hazır.", "ok");
+          setStatus(authStatus, "");
         } catch (error) {
-          setStatus(authStatus, `Kayit hatasi: ${error.message}`, true);
+          setStatus(authStatus, error.message || "Giriş işlemi başarısız.", "err");
+        } finally {
+          submitAuth.disabled = false;
         }
-      });
+      }
 
-      document.getElementById("logoutBtn").addEventListener("click", () => {
-        token = "";
-        rows = [];
+      function logout() {
+        disconnectWs();
+        state.token = "";
+        state.rows = [];
         localStorage.removeItem("receiper_token");
-        if (ws) ws.close();
-        showAuth();
         renderRows();
-      });
+        setStatus(appStatus, "");
+        showAuthView();
+      }
 
+      modeLogin.addEventListener("click", () => setAuthMode("login"));
+      modeRegister.addEventListener("click", () => setAuthMode("register"));
+      submitAuth.addEventListener("click", submitAuthForm);
       document.getElementById("refreshBtn").addEventListener("click", async () => {
         try {
           await loadReceipts();
-          setStatus(appStatus, "Tablo yenilendi.");
+          setStatus(appStatus, "Tablo güncellendi.", "ok");
         } catch (error) {
-          setStatus(appStatus, `Yenileme hatasi: ${error.message}`, true);
+          setStatus(appStatus, error.message || "Güncelleme hatası.", "err");
         }
       });
+      document.getElementById("exportBtn").addEventListener("click", exportExcelLikeCsv);
+      document.getElementById("logoutBtn").addEventListener("click", logout);
 
-      document.getElementById("pairBtn").addEventListener("click", async () => {
-        try {
-          await generatePairCode();
-          setStatus(appStatus, "Eslestirme kodu olusturuldu.");
-        } catch (error) {
-          setStatus(appStatus, `Pairing hatasi: ${error.message}`, true);
+      async function boot() {
+        setAuthMode("login");
+        renderRows();
+        if (!state.token) {
+          showAuthView();
+          return;
         }
-      });
 
-      document.getElementById("exportBtn").addEventListener("click", exportExcel);
-
-      async function bootstrapApp() {
-        showApp();
         try {
+          showAppView();
           await loadMe();
           await loadReceipts();
-          await generatePairCode();
           connectWs();
-          setStatus(appStatus, "Hazir.");
-        } catch (error) {
-          setStatus(appStatus, `Baslatma hatasi: ${error.message}`, true);
+          setStatus(appStatus, "Hazır.", "ok");
+        } catch (_) {
+          logout();
         }
       }
 
-      (async () => {
-        if (!token) {
-          showAuth();
-          return;
-        }
-        await bootstrapApp();
-      })();
+      boot();
     </script>
   </body>
 </html>
