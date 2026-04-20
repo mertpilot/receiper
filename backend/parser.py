@@ -16,7 +16,9 @@ TIME_REGEX = re.compile(r"\b([0-2]?\d:[0-5]\d(?::[0-5]\d)?)\b")
 VAT_RATE_REGEX = re.compile(r"%\s*([0-9]{1,2})|\b([0-9]{1,2})\s*%")
 OCR_MAX_SIDE = 2200
 OCR_MIN_SIDE = 900
-OCR_TESSERACT_TIMEOUT_SECONDS = int(os.getenv("OCR_TESSERACT_TIMEOUT_SECONDS", "8"))
+OCR_TESSERACT_TIMEOUT_SECONDS = int(os.getenv("OCR_TESSERACT_TIMEOUT_SECONDS", "14"))
+OCR_TESSERACT_RETRY_TIMEOUT_SECONDS = int(os.getenv("OCR_TESSERACT_RETRY_TIMEOUT_SECONDS", "24"))
+OCR_TIMEOUT_RESIZE_MAX_SIDE = int(os.getenv("OCR_TIMEOUT_RESIZE_MAX_SIDE", "1700"))
 
 
 def _strip_diacritics(text: str) -> str:
@@ -156,15 +158,47 @@ def _score_ocr_text(text: str) -> float:
     return score
 
 
+def _downscale_for_timeout_retry(image: Image.Image) -> Image.Image:
+    width, height = image.size
+    max_side = max(width, height)
+    if max_side <= OCR_TIMEOUT_RESIZE_MAX_SIDE:
+        return image
+    scale = OCR_TIMEOUT_RESIZE_MAX_SIDE / float(max_side)
+    new_size = (
+        max(1, int(round(width * scale))),
+        max(1, int(round(height * scale))),
+    )
+    return image.resize(new_size, Image.Resampling.LANCZOS)
+
+
 def _ocr_single(image: Image.Image, lang: str, psm: int) -> str:
     config = _build_tesseract_config(psm=psm)
-    text = pytesseract.image_to_string(
-        image,
-        lang=lang,
-        config=config,
-        timeout=OCR_TESSERACT_TIMEOUT_SECONDS,
-    )
-    return (text or "").strip()
+    try:
+        text = pytesseract.image_to_string(
+            image,
+            lang=lang,
+            config=config,
+            timeout=OCR_TESSERACT_TIMEOUT_SECONDS,
+        )
+        return (text or "").strip()
+    except RuntimeError as exc:
+        # pytesseract raises RuntimeError("Tesseract process timeout") on timeout.
+        if "timeout" not in str(exc).lower():
+            raise
+
+        retry_image = _downscale_for_timeout_retry(image)
+        try:
+            text = pytesseract.image_to_string(
+                retry_image,
+                lang=lang,
+                config=config,
+                timeout=OCR_TESSERACT_RETRY_TIMEOUT_SECONDS,
+            )
+            return (text or "").strip()
+        except RuntimeError as retry_exc:
+            if "timeout" in str(retry_exc).lower():
+                return ""
+            raise
 
 
 def _resize_for_ocr(image: Image.Image) -> Image.Image:
