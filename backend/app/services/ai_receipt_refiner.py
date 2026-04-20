@@ -401,15 +401,18 @@ def maybe_refine_receipt_parse(
 ) -> tuple[dict[str, Any], bool, float]:
     normalized_base = normalize_receipt_payload(parsed)
     base_confidence = compute_parse_confidence(normalized_base)
+    has_core_fields = bool(normalized_base.get("date")) and normalized_base.get("total") is not None
 
     if not settings.gemini_fallback_enabled:
         return normalized_base, False, base_confidence
     if not settings.gemini_api_key:
         return normalized_base, False, base_confidence
-    if base_confidence >= 0.68:
+    if base_confidence >= 0.62:
+        return normalized_base, False, base_confidence
+    if has_core_fields and base_confidence >= 0.48:
         return normalized_base, False, base_confidence
 
-    include_image = base_confidence < 0.52
+    include_image = base_confidence < 0.34
     ai_payload = _call_gemini(
         raw_text=raw_text,
         parsed=normalized_base,

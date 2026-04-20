@@ -121,7 +121,7 @@ def get_settings() -> Settings:
         gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite").strip(),
         gemini_fallback_enabled=_as_bool(os.getenv("GEMINI_FALLBACK_ENABLED", "true"), default=True),
-        gemini_timeout_seconds=int(os.getenv("GEMINI_TIMEOUT_SECONDS", "16")),
+        gemini_timeout_seconds=int(os.getenv("GEMINI_TIMEOUT_SECONDS", "6")),
     )
     _validate_settings(settings)
     return settings

@@ -16,6 +16,7 @@ TIME_REGEX = re.compile(r"\b([0-2]?\d:[0-5]\d(?::[0-5]\d)?)\b")
 VAT_RATE_REGEX = re.compile(r"%\s*([0-9]{1,2})|\b([0-9]{1,2})\s*%")
 OCR_MAX_SIDE = 2200
 OCR_MIN_SIDE = 900
+OCR_TESSERACT_TIMEOUT_SECONDS = int(os.getenv("OCR_TESSERACT_TIMEOUT_SECONDS", "8"))
 
 
 def _strip_diacritics(text: str) -> str:
@@ -157,7 +158,12 @@ def _score_ocr_text(text: str) -> float:
 
 def _ocr_single(image: Image.Image, lang: str, psm: int) -> str:
     config = _build_tesseract_config(psm=psm)
-    text = pytesseract.image_to_string(image, lang=lang, config=config)
+    text = pytesseract.image_to_string(
+        image,
+        lang=lang,
+        config=config,
+        timeout=OCR_TESSERACT_TIMEOUT_SECONDS,
+    )
     return (text or "").strip()
 
 
@@ -188,6 +194,55 @@ def _ocr_with_best_candidate(image: Image.Image, lang: str) -> str:
     best_rotation = 0
     work = _resize_for_ocr(image)
 
+    # Fast first pass: straight orientation with psm 6 is usually enough for receipts.
+    base0 = _prepare_variant(work, 0, "base")
+    text0 = _ocr_single(base0, lang=lang, psm=6)
+    score0 = _score_ocr_text(text0)
+    if score0 >= 14:
+        return text0
+
+    best_text = text0
+    best_score = score0
+
+    # Keep rotation search minimal for speed.
+    rotations: list[int] = [90] if work.height >= work.width else [270]
+
+    for rotation in rotations:
+        base = _prepare_variant(work, rotation, "base")
+        text = _ocr_single(base, lang=lang, psm=11)
+        score = _score_ocr_text(text)
+        if score > best_score:
+            best_score = score
+            best_text = text
+            best_rotation = rotation
+        if score >= 17:
+            return best_text
+
+    if best_score < 8:
+        base_180 = _prepare_variant(work, 180, "base")
+        text_180 = _ocr_single(base_180, lang=lang, psm=11)
+        score_180 = _score_ocr_text(text_180)
+        if score_180 > best_score:
+            best_score = score_180
+            best_text = text_180
+            best_rotation = 180
+
+    if best_score < 11:
+        proc = _prepare_variant(work, best_rotation, "threshold")
+        text = _ocr_single(proc, lang=lang, psm=6)
+        score = _score_ocr_text(text)
+        if score > best_score:
+            best_text = text
+
+    return (best_text or "").strip()
+
+
+def _ocr_with_deep_search(image: Image.Image, lang: str) -> str:
+    best_text = ""
+    best_score = -1.0
+    best_rotation = 0
+    work = _resize_for_ocr(image)
+
     rotations: list[int] = [0, 90, 270]
     if work.width > work.height:
         rotations = [0, 270, 90]
@@ -212,15 +267,14 @@ def _ocr_with_best_candidate(image: Image.Image, lang: str) -> str:
             best_text = text_180
             best_rotation = 180
 
-    for psm in (6,):
-        base = _prepare_variant(work, best_rotation, "base")
-        text = _ocr_single(base, lang=lang, psm=psm)
-        score = _score_ocr_text(text)
-        if score > best_score:
-            best_score = score
-            best_text = text
-        if score >= 16:
-            return best_text
+    base = _prepare_variant(work, best_rotation, "base")
+    text = _ocr_single(base, lang=lang, psm=6)
+    score = _score_ocr_text(text)
+    if score > best_score:
+        best_score = score
+        best_text = text
+    if score >= 16:
+        return best_text
 
     if best_score < 12:
         for variant in ("threshold", "denoise"):
@@ -242,6 +296,11 @@ def ocr_image(image_path: Path) -> str:
         with Image.open(image_path) as img:
             normalized = ImageOps.exif_transpose(img)
             text = _ocr_with_best_candidate(normalized, lang=lang)
+            # Speed-first path for most receipts; fall back to deep search on weak OCR.
+            if _score_ocr_text(text) < 10:
+                deep_text = _ocr_with_deep_search(normalized, lang=lang)
+                if _score_ocr_text(deep_text) > _score_ocr_text(text):
+                    text = deep_text
     except pytesseract.TesseractNotFoundError as exc:
         raise RuntimeError("Tesseract bulunamadi. Lutfen Tesseract OCR kurup TESSERACT_CMD ayari yapin.") from exc
     except pytesseract.TesseractError as exc:
@@ -574,7 +633,14 @@ def _merchant_guess(lines: list[str], tax_id: str) -> str:
         return ""
 
     candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates[0][1]
+    picked = candidates[0][1]
+    parts = picked.split()
+    while len(parts) > 1:
+        tail = re.sub(r"[^A-Za-zÇĞİÖŞÜçğıöşü]", "", parts[-1])
+        if len(tail) >= 3:
+            break
+        parts.pop()
+    return " ".join(parts)
 
 
 def _extract_expense_description(lines: list[str], merchant: str) -> str:
