@@ -1,128 +1,433 @@
 package com.receiper.app;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
-import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
-import java.util.ArrayList;
+import org.json.JSONObject;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private static final String PREFS = "receiper_prefs";
-    private static final String KEY_URL = "server_url";
+    private static final String KEY_TOKEN = "access_token";
+    private static final String BASE_URL = "https://receiper.onrender.com";
+    private static final String HEALTH_PATH = "/health";
+    private static final String AUTH_LOGIN_PATH = "/api/auth/login";
+    private static final String AUTH_ME_PATH = "/api/auth/me";
+    private static final String MOBILE_UPLOAD_PATH = "/api/mobile/receipts";
     private static final int CAMERA_PERMISSION_REQ = 5011;
+    private static final int MAX_CONNECT_ATTEMPTS = 3;
 
-    private WebView webView;
-    private EditText urlEditText;
-    private ValueCallbackCompat fileCallback;
-    private PermissionRequest pendingPermissionRequest;
+    private LinearLayout loadingScreen;
+    private LinearLayout loginScreen;
+    private LinearLayout scanScreen;
+    private TextView loadingMessage;
+    private TextView loadingPulse;
+    private Button retryConnectButton;
+    private EditText emailInput;
+    private EditText passwordInput;
+    private Button loginButton;
+    private TextView loginStatus;
+    private Button scanButton;
+    private TextView scanStatus;
 
-    private final ActivityResultLauncher<Intent> filePickerLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), this::onFilePickerResult);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private ObjectAnimator loadingAnimator;
+
+    private int connectAttempt = 0;
+    private boolean scanBusy = false;
+    private File currentPhotoFile;
+
+    private final ActivityResultLauncher<Uri> takePictureLauncher =
+            registerForActivityResult(new ActivityResultContracts.TakePicture(), this::onTakePictureResult);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        webView = findViewById(R.id.webView);
-        urlEditText = findViewById(R.id.urlEditText);
-        Button loadButton = findViewById(R.id.loadButton);
-        Button reloadButton = findViewById(R.id.reloadButton);
+        loadingScreen = findViewById(R.id.loadingScreen);
+        loginScreen = findViewById(R.id.loginScreen);
+        scanScreen = findViewById(R.id.scanScreen);
+        loadingMessage = findViewById(R.id.loadingMessage);
+        loadingPulse = findViewById(R.id.loadingPulse);
+        retryConnectButton = findViewById(R.id.retryConnectButton);
+        emailInput = findViewById(R.id.emailInput);
+        passwordInput = findViewById(R.id.passwordInput);
+        loginButton = findViewById(R.id.loginButton);
+        loginStatus = findViewById(R.id.loginStatus);
+        scanButton = findViewById(R.id.scanButton);
+        scanStatus = findViewById(R.id.scanStatus);
 
-        String savedUrl = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_URL, "https://your-receiper-api.onrender.com");
-        urlEditText.setText(savedUrl);
+        retryConnectButton.setOnClickListener(v -> startBootstrapFlow());
+        loginButton.setOnClickListener(v -> attemptLogin());
+        scanButton.setOnClickListener(v -> beginScanAndUpload());
 
-        setupWebView();
-        requestCameraPermissionIfNeeded();
-        loadUrl(savedUrl);
-
-        loadButton.setOnClickListener(v -> {
-            String entered = normalizeUrl(urlEditText.getText().toString());
-            if (entered.isEmpty()) {
-                Toast.makeText(this, "Gecerli URL gir", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_URL, entered)
-                    .apply();
-            loadUrl(entered);
-        });
-
-        reloadButton.setOnClickListener(v -> webView.reload());
+        startLoadingAnimation();
+        startBootstrapFlow();
     }
 
-    private void setupWebView() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (loadingAnimator != null) {
+            loadingAnimator.cancel();
+        }
+        executor.shutdownNow();
+    }
 
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(@NonNull WebView view, @NonNull WebResourceRequest request) {
-                return false;
-            }
+    private void startLoadingAnimation() {
+        loadingAnimator = ObjectAnimator.ofFloat(loadingPulse, "alpha", 0.35f, 1f);
+        loadingAnimator.setDuration(950L);
+        loadingAnimator.setRepeatCount(ObjectAnimator.INFINITE);
+        loadingAnimator.setRepeatMode(ObjectAnimator.REVERSE);
+        loadingAnimator.start();
+    }
+
+    private void startBootstrapFlow() {
+        connectAttempt = 0;
+        showLoadingScreen();
+        retryConnectButton.setVisibility(Button.GONE);
+        loadingMessage.setText("Uygulama yükleniyor, lütfen bekleyin");
+        loadingPulse.setText("Yükleniyor...");
+        runHealthAttempt();
+    }
+
+    private void runHealthAttempt() {
+        connectAttempt += 1;
+        loadingPulse.setText("Yükleniyor... (" + connectAttempt + "/" + MAX_CONNECT_ATTEMPTS + ")");
+
+        executor.execute(() -> {
+            HttpResult result = httpGet(HEALTH_PATH, null, 12000, 20000);
+            boolean ok = result.code >= 200 && result.code < 300;
+
+            mainHandler.post(() -> {
+                if (ok) {
+                    validateSavedSessionOrShowLogin();
+                    return;
+                }
+
+                if (connectAttempt < MAX_CONNECT_ATTEMPTS) {
+                    loadingMessage.setText("Sunucu başlatılıyor olabilir, tekrar deneniyor...");
+                    mainHandler.postDelayed(this::runHealthAttempt, 1600);
+                    return;
+                }
+
+                loadingMessage.setText("Bağlanılamadı. Sunucu cevap vermedi.");
+                loadingPulse.setText("Lütfen tekrar dene.");
+                retryConnectButton.setVisibility(Button.VISIBLE);
+            });
         });
+    }
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> {
-                    if (hasCameraPermission()) {
-                        grantVideoPermission(request);
-                    } else {
-                        pendingPermissionRequest = request;
-                        requestCameraPermissionIfNeeded();
+    private void validateSavedSessionOrShowLogin() {
+        String token = getStoredToken();
+        if (token.isEmpty()) {
+            showLoginScreen();
+            return;
+        }
+
+        executor.execute(() -> {
+            HttpResult result = httpGet(AUTH_ME_PATH, token, 10000, 20000);
+            mainHandler.post(() -> {
+                if (result.code >= 200 && result.code < 300) {
+                    showScanScreen();
+                    setScanStatus("Hazır.", false);
+                } else {
+                    clearStoredToken();
+                    showLoginScreen();
+                }
+            });
+        });
+    }
+
+    private void attemptLogin() {
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+
+        if (email.isEmpty() || password.isEmpty()) {
+            setLoginStatus("E-posta ve şifre zorunlu.", true);
+            return;
+        }
+
+        loginButton.setEnabled(false);
+        setLoginStatus("Giriş yapılıyor...", false);
+
+        executor.execute(() -> {
+            String body = "{\"email\":\"" + escapeJson(email) + "\",\"password\":\"" + escapeJson(password) + "\"}";
+            HttpResult result = httpPostJson(AUTH_LOGIN_PATH, null, body);
+
+            mainHandler.post(() -> {
+                loginButton.setEnabled(true);
+
+                if (result.code >= 200 && result.code < 300) {
+                    try {
+                        JSONObject obj = new JSONObject(result.body);
+                        String token = obj.optString("access_token", "");
+                        if (token.isEmpty()) {
+                            setLoginStatus("Token alınamadı.", true);
+                            return;
+                        }
+                        saveToken(token);
+                        setLoginStatus("", false);
+                        showScanScreen();
+                        setScanStatus("Hazır.", false);
+                    } catch (Exception parseError) {
+                        setLoginStatus("Giriş yanıtı okunamadı.", true);
                     }
-                });
-            }
-
-            @Override
-            public boolean onShowFileChooser(WebView webView,
-                                             android.webkit.ValueCallback<Uri[]> filePathCallback,
-                                             FileChooserParams fileChooserParams) {
-                if (fileCallback != null) {
-                    fileCallback.send(null);
-                }
-                fileCallback = new ValueCallbackCompat(filePathCallback);
-
-                Intent intent;
-                try {
-                    intent = fileChooserParams.createIntent();
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Dosya secici acilamadi", Toast.LENGTH_SHORT).show();
-                    return false;
+                    return;
                 }
 
-                filePickerLauncher.launch(intent);
-                return true;
-            }
+                setLoginStatus(extractErrorMessage(result.body, "Giriş başarısız."), true);
+            });
         });
+    }
+
+    private void beginScanAndUpload() {
+        if (scanBusy) {
+            return;
+        }
+        if (!hasCameraPermission()) {
+            requestCameraPermission();
+            return;
+        }
+
+        Uri imageUri = createCaptureUri();
+        if (imageUri == null) {
+            setScanStatus("Kamera dosyası oluşturulamadı.", true);
+            return;
+        }
+
+        setScanBusy(true);
+        setScanStatus("Kamera açılıyor...", false);
+        takePictureLauncher.launch(imageUri);
+    }
+
+    private void onTakePictureResult(Boolean success) {
+        if (Boolean.TRUE.equals(success)) {
+            uploadCurrentPhoto();
+            return;
+        }
+        setScanBusy(false);
+        setScanStatus("Çekim iptal edildi.", true);
+    }
+
+    private void uploadCurrentPhoto() {
+        if (currentPhotoFile == null || !currentPhotoFile.exists()) {
+            setScanBusy(false);
+            setScanStatus("Fotoğraf bulunamadı.", true);
+            return;
+        }
+
+        String token = getStoredToken();
+        if (token.isEmpty()) {
+            setScanBusy(false);
+            showLoginScreen();
+            return;
+        }
+
+        setScanStatus("Fiş gönderiliyor...", false);
+        executor.execute(() -> {
+            HttpResult result = httpPostMultipartImage(MOBILE_UPLOAD_PATH, token, currentPhotoFile);
+            mainHandler.post(() -> {
+                setScanBusy(false);
+
+                if (result.code >= 200 && result.code < 300) {
+                    setScanStatus("Fiş başarıyla gönderildi.", false);
+                    return;
+                }
+
+                if (result.code == 401) {
+                    clearStoredToken();
+                    showLoginScreen();
+                    setLoginStatus("Oturum süresi doldu, tekrar giriş yap.", true);
+                    return;
+                }
+
+                setScanStatus(extractErrorMessage(result.body, "Gönderim başarısız."), true);
+            });
+        });
+    }
+
+    private Uri createCaptureUri() {
+        try {
+            File dir = new File(getCacheDir(), "captures");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return null;
+            }
+            currentPhotoFile = new File(dir, "receipt_" + System.currentTimeMillis() + ".jpg");
+            return FileProvider.getUriForFile(
+                    this,
+                    getPackageName() + ".fileprovider",
+                    currentPhotoFile
+            );
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private HttpResult httpGet(String path, String token, int connectTimeoutMs, int readTimeoutMs) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(BASE_URL + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(connectTimeoutMs);
+            conn.setReadTimeout(readTimeoutMs);
+            conn.setRequestProperty("Accept", "application/json");
+            if (token != null && !token.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+            }
+
+            int code = conn.getResponseCode();
+            String body = readResponseBody(conn);
+            return new HttpResult(code, body);
+        } catch (Exception ex) {
+            return new HttpResult(-1, ex.getMessage() == null ? "Network error" : ex.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private HttpResult httpPostJson(String path, String token, String body) {
+        HttpURLConnection conn = null;
+        try {
+            byte[] data = body.getBytes(StandardCharsets.UTF_8);
+            URL url = new URL(BASE_URL + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(12000);
+            conn.setReadTimeout(24000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            conn.setRequestProperty("Accept", "application/json");
+            if (token != null && !token.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+            }
+
+            conn.getOutputStream().write(data);
+            int code = conn.getResponseCode();
+            String responseBody = readResponseBody(conn);
+            return new HttpResult(code, responseBody);
+        } catch (Exception ex) {
+            return new HttpResult(-1, ex.getMessage() == null ? "Network error" : ex.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private HttpResult httpPostMultipartImage(String path, String token, File imageFile) {
+        HttpURLConnection conn = null;
+        String boundary = "----ReceiperBoundary" + System.currentTimeMillis();
+        try {
+            URL url = new URL(BASE_URL + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(65000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+            conn.setRequestProperty("Accept", "application/json");
+
+            try (DataOutputStream out = new DataOutputStream(conn.getOutputStream());
+                 FileInputStream fileIn = new FileInputStream(imageFile)) {
+                out.writeBytes("--" + boundary + "\r\n");
+                out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"" + imageFile.getName() + "\"\r\n");
+                out.writeBytes("Content-Type: image/jpeg\r\n\r\n");
+
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = fileIn.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.writeBytes("\r\n--" + boundary + "--\r\n");
+                out.flush();
+            }
+
+            int code = conn.getResponseCode();
+            String responseBody = readResponseBody(conn);
+            return new HttpResult(code, responseBody);
+        } catch (Exception ex) {
+            return new HttpResult(-1, ex.getMessage() == null ? "Network error" : ex.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private String readResponseBody(HttpURLConnection conn) throws IOException {
+        InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (stream == null) {
+            return "";
+        }
+        try (BufferedInputStream bis = new BufferedInputStream(stream);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(bis, StandardCharsets.UTF_8))) {
+            StringBuilder builder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+            return builder.toString();
+        }
+    }
+
+    private String extractErrorMessage(String body, String fallback) {
+        try {
+            JSONObject obj = new JSONObject(body);
+            String detail = obj.optString("detail", "").trim();
+            if (!detail.isEmpty()) {
+                return detail;
+            }
+            String message = obj.optString("message", "").trim();
+            if (!message.isEmpty()) {
+                return message;
+            }
+            return fallback;
+        } catch (Exception ignore) {
+            return fallback;
+        }
+    }
+
+    private String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private boolean hasCameraPermission() {
@@ -130,105 +435,78 @@ public class MainActivity extends AppCompatActivity {
                 == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void requestCameraPermissionIfNeeded() {
-        if (!hasCameraPermission()) {
-            ActivityCompat.requestPermissions(
-                    this,
-                    new String[]{Manifest.permission.CAMERA},
-                    CAMERA_PERMISSION_REQ
-            );
-        }
-    }
-
-    private void grantVideoPermission(PermissionRequest request) {
-        ArrayList<String> granted = new ArrayList<>();
-        for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
-                granted.add(resource);
-            }
-        }
-
-        if (granted.isEmpty()) {
-            request.deny();
-            return;
-        }
-
-        request.grant(granted.toArray(new String[0]));
+    private void requestCameraPermission() {
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQ);
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
         if (requestCode != CAMERA_PERMISSION_REQ) {
             return;
         }
 
         boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-
-        if (pendingPermissionRequest != null) {
-            if (granted) {
-                grantVideoPermission(pendingPermissionRequest);
-            } else {
-                pendingPermissionRequest.deny();
-            }
-            pendingPermissionRequest = null;
-        }
-
-        if (!granted) {
-            Toast.makeText(this, "Kamera izni olmadan otomatik cekim acilmaz", Toast.LENGTH_SHORT).show();
+        if (granted) {
+            beginScanAndUpload();
+        } else {
+            setScanStatus("Kamera izni gerekli.", true);
         }
     }
 
-    private void onFilePickerResult(ActivityResult result) {
-        if (fileCallback == null) {
-            return;
-        }
-
-        Uri[] uris = WebChromeClient.FileChooserParams.parseResult(result.getResultCode(), result.getData());
-        fileCallback.send(uris);
-        fileCallback = null;
+    private void showLoadingScreen() {
+        loadingScreen.setVisibility(LinearLayout.VISIBLE);
+        loginScreen.setVisibility(LinearLayout.GONE);
+        scanScreen.setVisibility(LinearLayout.GONE);
     }
 
-    private void loadUrl(String url) {
-        String normalized = normalizeUrl(url);
-        if (normalized.isEmpty()) {
-            return;
-        }
-        webView.loadUrl(normalized);
+    private void showLoginScreen() {
+        loadingScreen.setVisibility(LinearLayout.GONE);
+        loginScreen.setVisibility(LinearLayout.VISIBLE);
+        scanScreen.setVisibility(LinearLayout.GONE);
     }
 
-    private String normalizeUrl(String url) {
-        String trimmed = url == null ? "" : url.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
-            trimmed = "http://" + trimmed;
-        }
-        return trimmed;
+    private void showScanScreen() {
+        loadingScreen.setVisibility(LinearLayout.GONE);
+        loginScreen.setVisibility(LinearLayout.GONE);
+        scanScreen.setVisibility(LinearLayout.VISIBLE);
     }
 
-    @Override
-    public void onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack();
-            return;
-        }
-        super.onBackPressed();
+    private void setLoginStatus(String text, boolean isError) {
+        loginStatus.setText(text);
+        loginStatus.setTextColor(isError ? Color.parseColor("#FF8B8B") : Color.WHITE);
     }
 
-    private static class ValueCallbackCompat {
-        private final android.webkit.ValueCallback<Uri[]> callback;
+    private void setScanStatus(String text, boolean isError) {
+        scanStatus.setText(text);
+        scanStatus.setTextColor(isError ? Color.parseColor("#FF8B8B") : Color.WHITE);
+    }
 
-        ValueCallbackCompat(android.webkit.ValueCallback<Uri[]> callback) {
-            this.callback = callback;
-        }
+    private void setScanBusy(boolean busy) {
+        scanBusy = busy;
+        scanButton.setEnabled(!busy);
+    }
 
-        void send(Uri[] uris) {
-            callback.onReceiveValue(uris);
+    private void saveToken(String token) {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, token).apply();
+    }
+
+    private void clearStoredToken() {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_TOKEN).apply();
+    }
+
+    private String getStoredToken() {
+        String token = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TOKEN, "");
+        return token == null ? "" : token.trim();
+    }
+
+    private static final class HttpResult {
+        final int code;
+        final String body;
+
+        HttpResult(int code, String body) {
+            this.code = code;
+            this.body = body == null ? "" : body;
         }
     }
 }
