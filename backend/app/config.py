@@ -18,6 +18,10 @@ class Settings:
     allowed_origins: list[str]
     pairing_ttl_minutes: int
     dashboard_base_url: str
+    gemini_api_key: str
+    gemini_model: str
+    gemini_fallback_enabled: bool
+    gemini_timeout_seconds: int
 
 
 def _normalize_database_url(url: str) -> str:
@@ -26,6 +30,13 @@ def _normalize_database_url(url: str) -> str:
     if url.startswith("postgresql://"):
         return url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
+
+
+def _as_bool(value: str, default: bool = False) -> bool:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on", "y"}
 
 
 @lru_cache
@@ -47,5 +58,8 @@ def get_settings() -> Settings:
         allowed_origins=origins,
         pairing_ttl_minutes=int(os.getenv("PAIRING_TTL_MINUTES", "5")),
         dashboard_base_url=os.getenv("DASHBOARD_BASE_URL", ""),
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite").strip(),
+        gemini_fallback_enabled=_as_bool(os.getenv("GEMINI_FALLBACK_ENABLED", "true"), default=True),
+        gemini_timeout_seconds=int(os.getenv("GEMINI_TIMEOUT_SECONDS", "16")),
     )
-

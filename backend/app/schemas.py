@@ -95,9 +95,10 @@ class UploadReceiptResponse(BaseModel):
     raw_text_preview: str
     parsed: dict
     template_row: dict
+    ai_used: bool = False
+    parse_confidence: float | None = None
 
 
 class RealtimeReceiptEvent(BaseModel):
     event: str = "receipt.created"
     receipt: ReceiptOut
-

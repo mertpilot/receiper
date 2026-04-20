@@ -13,6 +13,7 @@ from parser import ocr_image, parse_receipt_text
 
 from ..config import get_settings
 from ..models import Receipt, User
+from .ai_receipt_refiner import maybe_refine_receipt_parse
 
 
 settings = get_settings()
@@ -76,7 +77,7 @@ async def process_receipt_upload(
     user: User,
     db: Session,
     device_id: str | None = None,
-) -> tuple[Receipt, dict, dict, str]:
+) -> tuple[Receipt, dict, dict, str, bool, float]:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lutfen gecerli bir gorsel yukleyin")
 
@@ -96,6 +97,11 @@ async def process_receipt_upload(
     try:
         raw_text = ocr_image(destination)
         parsed = parse_receipt_text(raw_text)
+        parsed, ai_used, parse_confidence = maybe_refine_receipt_parse(
+            raw_text=raw_text,
+            parsed=parsed,
+            image_path=destination,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except Exception as exc:
@@ -114,5 +120,4 @@ async def process_receipt_upload(
     db.add(receipt)
     db.commit()
     db.refresh(receipt)
-    return receipt, parsed, template_row, raw_text
-
+    return receipt, parsed, template_row, raw_text, ai_used, parse_confidence

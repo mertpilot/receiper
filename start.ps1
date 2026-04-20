@@ -11,6 +11,33 @@ $venv = Join-Path $backend ".venv"
 
 Set-Location $backend
 
+function Import-EnvFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    Get-Content -LiteralPath $Path | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith("#")) {
+            return
+        }
+        $parts = $line.Split("=", 2)
+        if ($parts.Count -ne 2) {
+            return
+        }
+        $name = $parts[0].Trim()
+        $value = $parts[1].Trim()
+        if (-not $name) {
+            return
+        }
+        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+}
+
+Import-EnvFile (Join-Path $backend ".env")
+Import-EnvFile (Join-Path $backend ".env.local")
+
 if (-not (Test-Path -LiteralPath $venv)) {
     python -m venv .venv
 }

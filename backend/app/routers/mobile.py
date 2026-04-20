@@ -37,7 +37,7 @@ async def upload_receipt_from_mobile(
         linked_device_id = device.id
         device.last_seen_at = datetime.now(timezone.utc)
 
-    receipt, parsed, template_row, raw_text = await process_receipt_upload(
+    receipt, parsed, template_row, raw_text, ai_used, parse_confidence = await process_receipt_upload(
         file=file,
         user=current_user,
         db=db,
@@ -58,6 +58,8 @@ async def upload_receipt_from_mobile(
         raw_text_preview=raw_text[:800],
         parsed=parsed,
         template_row=template_row,
+        ai_used=ai_used,
+        parse_confidence=parse_confidence,
     )
 
 

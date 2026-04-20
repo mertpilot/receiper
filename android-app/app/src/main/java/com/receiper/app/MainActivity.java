@@ -4,11 +4,16 @@ import android.Manifest;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -26,9 +31,11 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -48,6 +55,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String MOBILE_UPLOAD_PATH = "/api/mobile/receipts";
     private static final int CAMERA_PERMISSION_REQ = 5011;
     private static final int MAX_CONNECT_ATTEMPTS = 3;
+    private static final int TARGET_UPLOAD_EDGE = 1800;
+    private static final int INITIAL_JPEG_QUALITY = 88;
+    private static final long MAX_UPLOAD_IMAGE_BYTES = 1_700_000L;
 
     private LinearLayout loadingScreen;
     private LinearLayout loginScreen;
@@ -119,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
     private void startBootstrapFlow() {
         connectAttempt = 0;
         showLoadingScreen();
-        retryConnectButton.setVisibility(Button.GONE);
+        retryConnectButton.setVisibility(View.GONE);
         loadingMessage.setText("Uygulama yükleniyor, lütfen bekleyin");
         loadingPulse.setText("Yükleniyor...");
         runHealthAttempt();
@@ -147,7 +157,7 @@ public class MainActivity extends AppCompatActivity {
 
                 loadingMessage.setText("Bağlanılamadı. Sunucu cevap vermedi.");
                 loadingPulse.setText("Lütfen tekrar dene.");
-                retryConnectButton.setVisibility(Button.VISIBLE);
+                retryConnectButton.setVisibility(View.VISIBLE);
             });
         });
     }
@@ -258,14 +268,34 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        setScanStatus("Fiş gönderiliyor...", false);
+        setScanStatus("Fiş hazırlanıyor...", false);
         executor.execute(() -> {
-            HttpResult result = httpPostMultipartImage(MOBILE_UPLOAD_PATH, token, currentPhotoFile);
+            File uploadFile = currentPhotoFile;
+            boolean deleteAfterUpload = false;
+            try {
+                File optimized = optimizePhotoForUpload(currentPhotoFile);
+                if (optimized != null && optimized.exists()) {
+                    uploadFile = optimized;
+                    deleteAfterUpload = !optimized.equals(currentPhotoFile);
+                }
+            } catch (Exception ignore) {
+                uploadFile = currentPhotoFile;
+                deleteAfterUpload = false;
+            }
+
+            mainHandler.post(() -> setScanStatus("Fiş gönderiliyor...", false));
+            HttpResult result = httpPostMultipartImage(MOBILE_UPLOAD_PATH, token, uploadFile);
+
+            if (deleteAfterUpload) {
+                // Temporary optimized file is not needed after upload.
+                uploadFile.delete();
+            }
+
             mainHandler.post(() -> {
                 setScanBusy(false);
 
                 if (result.code >= 200 && result.code < 300) {
-                    setScanStatus("Fiş başarıyla gönderildi.", false);
+                    setScanStatus(buildUploadSuccessMessage(result.body), false);
                     return;
                 }
 
@@ -279,6 +309,115 @@ public class MainActivity extends AppCompatActivity {
                 setScanStatus(extractErrorMessage(result.body, "Gönderim başarısız."), true);
             });
         });
+    }
+
+    private String buildUploadSuccessMessage(String body) {
+        try {
+            JSONObject obj = new JSONObject(body);
+            boolean aiUsed = obj.optBoolean("ai_used", false);
+            double confidence = obj.optDouble("parse_confidence", -1);
+            if (confidence < 0) {
+                return "İşlendi, sıradaki fiş.";
+            }
+            int percent = (int) Math.round(confidence * 100);
+            if (aiUsed) {
+                return "İşlendi, sıradaki fiş. (AI doğrulama: %" + percent + ")";
+            }
+            return "İşlendi, sıradaki fiş. (Doğruluk: %" + percent + ")";
+        } catch (Exception ignore) {
+            return "İşlendi, sıradaki fiş.";
+        }
+    }
+
+    private File optimizePhotoForUpload(File sourceFile) throws IOException {
+        Bitmap bitmap = decodeScaledBitmap(sourceFile, TARGET_UPLOAD_EDGE);
+        if (bitmap == null) {
+            return sourceFile;
+        }
+
+        Bitmap rotated = applyExifRotation(sourceFile, bitmap);
+        if (rotated == null) {
+            bitmap.recycle();
+            return sourceFile;
+        }
+
+        byte[] compressed = null;
+        int quality = INITIAL_JPEG_QUALITY;
+        while (quality >= 66) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            rotated.compress(Bitmap.CompressFormat.JPEG, quality, bos);
+            byte[] bytes = bos.toByteArray();
+            if (bytes.length <= MAX_UPLOAD_IMAGE_BYTES || quality <= 66) {
+                compressed = bytes;
+                break;
+            }
+            quality -= 6;
+        }
+
+        if (compressed == null || compressed.length == 0) {
+            rotated.recycle();
+            return sourceFile;
+        }
+
+        File optimized = new File(sourceFile.getParentFile(), "upload_" + sourceFile.getName());
+        try (FileOutputStream fos = new FileOutputStream(optimized)) {
+            fos.write(compressed);
+        }
+
+        rotated.recycle();
+        return optimized;
+    }
+
+    private Bitmap decodeScaledBitmap(File sourceFile, int targetEdge) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(sourceFile.getAbsolutePath(), bounds);
+
+        int width = bounds.outWidth;
+        int height = bounds.outHeight;
+        if (width <= 0 || height <= 0) {
+            return null;
+        }
+
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = calculateInSampleSize(width, height, targetEdge);
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        return BitmapFactory.decodeFile(sourceFile.getAbsolutePath(), options);
+    }
+
+    private int calculateInSampleSize(int width, int height, int targetEdge) {
+        int sampleSize = 1;
+        int largest = Math.max(width, height);
+        while ((largest / sampleSize) > targetEdge) {
+            sampleSize *= 2;
+        }
+        return Math.max(1, sampleSize);
+    }
+
+    private Bitmap applyExifRotation(File sourceFile, Bitmap bitmap) {
+        try {
+            ExifInterface exif = new ExifInterface(sourceFile.getAbsolutePath());
+            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+
+            Matrix matrix = new Matrix();
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_90) {
+                matrix.postRotate(90f);
+            } else if (orientation == ExifInterface.ORIENTATION_ROTATE_180) {
+                matrix.postRotate(180f);
+            } else if (orientation == ExifInterface.ORIENTATION_ROTATE_270) {
+                matrix.postRotate(270f);
+            } else {
+                return bitmap;
+            }
+
+            Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (rotated != bitmap) {
+                bitmap.recycle();
+            }
+            return rotated;
+        } catch (IOException e) {
+            return bitmap;
+        }
     }
 
     private Uri createCaptureUri() {
@@ -455,21 +594,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showLoadingScreen() {
-        loadingScreen.setVisibility(LinearLayout.VISIBLE);
-        loginScreen.setVisibility(LinearLayout.GONE);
-        scanScreen.setVisibility(LinearLayout.GONE);
+        loadingScreen.setVisibility(View.VISIBLE);
+        loginScreen.setVisibility(View.GONE);
+        scanScreen.setVisibility(View.GONE);
     }
 
     private void showLoginScreen() {
-        loadingScreen.setVisibility(LinearLayout.GONE);
-        loginScreen.setVisibility(LinearLayout.VISIBLE);
-        scanScreen.setVisibility(LinearLayout.GONE);
+        loadingScreen.setVisibility(View.GONE);
+        loginScreen.setVisibility(View.VISIBLE);
+        scanScreen.setVisibility(View.GONE);
     }
 
     private void showScanScreen() {
-        loadingScreen.setVisibility(LinearLayout.GONE);
-        loginScreen.setVisibility(LinearLayout.GONE);
-        scanScreen.setVisibility(LinearLayout.VISIBLE);
+        loadingScreen.setVisibility(View.GONE);
+        loginScreen.setVisibility(View.GONE);
+        scanScreen.setVisibility(View.VISIBLE);
     }
 
     private void setLoginStatus(String text, boolean isError) {

@@ -16,3 +16,6 @@ android-app/local.properties
 *.apk
 Receiper-debug.apk
 backend/.deps_state
+backend/.env
+backend/.env.local
+backend/.env.*
