@@ -24,6 +24,13 @@ class Settings:
     gemini_timeout_seconds: int
 
 
+def _strip_wrapping_quotes(value: str) -> str:
+    raw = (value or "").strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {"'", '"'}:
+        return raw[1:-1].strip()
+    return raw
+
+
 def _is_render_runtime() -> bool:
     return any(
         [
@@ -46,9 +53,30 @@ def _default_app_env() -> str:
 def _validate_settings(settings: Settings) -> None:
     env = (settings.environment or "").strip().lower()
     is_production = env in {"production", "prod"}
-    db = (settings.database_url or "").strip().lower()
+    db_raw = _strip_wrapping_quotes(settings.database_url or "")
+    db = db_raw.lower()
 
-    if is_production and (not db or db.startswith("sqlite:///")):
+    if not db:
+        raise RuntimeError(
+            "DATABASE_URL bos. Render Postgres baglantisini servis env'ine ekleyin "
+            "(postgresql://... ile baslayan tam URL)."
+        )
+
+    if "://" not in db:
+        raise RuntimeError(
+            "DATABASE_URL gecersiz. Sadece servis adi yazilmis gorunuyor "
+            f"('{db_raw}'). Lutfen Render'daki Internal Database URL degerini "
+            "tam haliyle girin (postgresql://... )."
+        )
+
+    supported_schemes = ("sqlite://", "postgres://", "postgresql://", "postgresql+psycopg2://")
+    if not db.startswith(supported_schemes):
+        raise RuntimeError(
+            "DATABASE_URL desteklenmeyen formatta. Desteklenenler: "
+            "sqlite://, postgres://, postgresql://, postgresql+psycopg2://"
+        )
+
+    if is_production and db.startswith("sqlite://"):
         raise RuntimeError(
             "Production ortaminda kalici bir veritabani zorunlu. "
             "Lutfen Render'da DATABASE_URL degerini PostgreSQL olarak ayarlayin."
@@ -56,6 +84,7 @@ def _validate_settings(settings: Settings) -> None:
 
 
 def _normalize_database_url(url: str) -> str:
+    url = _strip_wrapping_quotes(url)
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+psycopg2://", 1)
     if url.startswith("postgresql://"):
