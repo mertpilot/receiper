@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Receiper Mobile Test Client</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #eef3f7;
+        margin: 0;
+        color: #132131;
+      }
+      main {
+        width: min(720px, 95vw);
+        margin: 14px auto;
+        background: #fff;
+        border: 1px solid #d6e0ea;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      input,
+      button {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 8px;
+      }
+      input {
+        border: 1px solid #cfdae5;
+      }
+      button {
+        border: 0;
+        background: #0b8f7f;
+        color: #fff;
+        font-weight: 700;
+      }
+      pre {
+        background: #f5f9fc;
+        border: 1px solid #d9e4ee;
+        border-radius: 8px;
+        padding: 8px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h2>Receiper Mobile Test Client</h2>
+      <input id="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="Sifre" />
+      <button id="loginBtn">Login</button>
+
+      <input id="pairCode" placeholder="Pair Code (opsiyonel)" />
+      <input id="deviceName" placeholder="Cihaz adi" value="Android Test Cihaz" />
+      <button id="pairBtn">Pair Et</button>
+
+      <input id="file" type="file" accept="image/*" capture="environment" />
+      <input id="deviceId" placeholder="Device ID (opsiyonel)" />
+      <button id="uploadBtn">Fis Gonder</button>
+
+      <pre id="result">Hazir</pre>
+    </main>
+    <script>
+      let token = localStorage.getItem("receiper_mobile_token") || "";
+
+      function show(value) {
+        document.getElementById("result").textContent =
+          typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      async function api(path, options = {}) {
+        const headers = { ...(options.headers || {}) };
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+        const response = await fetch(path, { ...options, headers });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+        return data;
+      }
+
+      document.getElementById("loginBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            email: document.getElementById("email").value.trim(),
+            password: document.getElementById("password").value,
+          };
+          const data = await api("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          token = data.access_token;
+          localStorage.setItem("receiper_mobile_token", token);
+          show(data);
+        } catch (error) {
+          show(error.message);
+        }
+      });
+
+      document.getElementById("pairBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            code: document.getElementById("pairCode").value.trim(),
+            device_name: document.getElementById("deviceName").value.trim() || "Android Cihaz",
+            platform: "android",
+          };
+          const data = await api("/api/mobile/pair", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          document.getElementById("deviceId").value = data.device.id;
+          show(data);
+        } catch (error) {
+          show(error.message);
+        }
+      });
+
+      document.getElementById("uploadBtn").addEventListener("click", async () => {
+        try {
+          const file = document.getElementById("file").files[0];
+          if (!file) {
+            show("Once fis gorseli sec");
+            return;
+          }
+          const form = new FormData();
+          form.append("file", file, file.name || "receipt.jpg");
+          const deviceId = document.getElementById("deviceId").value.trim();
+          if (deviceId) form.append("device_id", deviceId);
+
+          const data = await api("/api/mobile/receipts", { method: "POST", body: form });
+          show(data);
+        } catch (error) {
+          show(error.message);
+        }
+      });
+    </script>
+  </body>
+</html>
+

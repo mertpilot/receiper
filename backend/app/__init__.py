@@ -1,0 +1,2 @@
+"""Receiper Cloud app package."""
+

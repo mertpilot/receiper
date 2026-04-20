@@ -1,0 +1,612 @@
+﻿<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Receiper</title>
+    <style>
+      :root {
+        --bg: #edf4f7;
+        --card: #ffffff;
+        --ink: #13202a;
+        --muted: #5d6b77;
+        --line: #d8e3ec;
+        --accent: #089583;
+        --accent-dark: #067366;
+        --danger: #c03636;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: radial-gradient(circle at top right, #d3f0ea 0%, var(--bg) 42%);
+        color: var(--ink);
+      }
+
+      .container {
+        width: min(1200px, 94vw);
+        margin: 20px auto 36px;
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 16px;
+        box-shadow: 0 12px 30px rgba(12, 24, 36, 0.08);
+        padding: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.7rem;
+      }
+
+      .sub {
+        margin: 6px 0 14px;
+        color: var(--muted);
+      }
+
+      .camera-layout {
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: 12px;
+      }
+
+      .camera-box {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #0f1c23;
+        position: relative;
+        overflow: hidden;
+        min-height: 420px;
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .guide {
+        position: absolute;
+        inset: 8% 9%;
+        border: 2px dashed rgba(8, 149, 131, 0.9);
+        border-radius: 12px;
+        pointer-events: none;
+      }
+
+      .controls {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-weight: 700;
+        color: #fff;
+        background: var(--accent);
+      }
+
+      button.secondary {
+        background: #4c6070;
+      }
+
+      button.warn {
+        background: #a76b11;
+      }
+
+      button:hover:enabled {
+        cursor: pointer;
+        background: var(--accent-dark);
+      }
+
+      button.secondary:hover:enabled {
+        background: #3f4f5d;
+      }
+
+      button.warn:hover:enabled {
+        background: #8a590b;
+      }
+
+      button:disabled {
+        opacity: 0.55;
+      }
+
+      #status {
+        margin: 10px 0 6px;
+        color: var(--muted);
+      }
+
+      #status.error {
+        color: var(--danger);
+      }
+
+      .session {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .money-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(100px, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .money-card {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fcfd;
+        padding: 10px;
+      }
+
+      .money-label {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .money-value {
+        margin-top: 4px;
+        font-size: 1.28rem;
+        font-weight: 800;
+      }
+
+      .money-value.total {
+        color: #04695e;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(110px, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .meta-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f6fbfd;
+        padding: 8px;
+        font-size: 0.84rem;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fbfdfe;
+        padding: 8px;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: #20323e;
+      }
+
+      .table-wrap {
+        margin-top: 8px;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      table {
+        width: 100%;
+        min-width: 1000px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        text-align: left;
+        font-size: 0.85rem;
+        padding: 8px;
+        border-bottom: 1px solid #e5edf4;
+        white-space: nowrap;
+      }
+
+      th {
+        background: #f0f6fb;
+      }
+
+      pre {
+        margin-top: 8px;
+        font-size: 0.8rem;
+        max-height: 180px;
+        overflow-y: auto;
+        border: 1px solid #d8e3ec;
+        border-radius: 8px;
+        background: #f8fbfd;
+        padding: 8px;
+        white-space: pre-wrap;
+      }
+
+      #canvas {
+        display: none;
+      }
+
+      @media (max-width: 980px) {
+        .camera-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .camera-box {
+          min-height: 340px;
+        }
+
+        .money-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .meta {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section class="card">
+        <h1>Receiper</h1>
+        <p class="sub">
+          Baglanti ayni kalir. Dosya secme yok. Kamera ile fis cek, otomatik para ekranina dus.
+        </p>
+
+        <div class="camera-layout">
+          <div>
+            <div class="camera-box">
+              <video id="video" playsinline autoplay muted></video>
+              <div class="guide"></div>
+            </div>
+
+            <div class="controls">
+              <button id="startBtn" type="button">Kamera Ac</button>
+              <button id="captureBtn" type="button" class="secondary">Cek ve Isle</button>
+              <button id="autoBtn" type="button" class="warn">Otomatik Kapali</button>
+              <button id="nextBtn" type="button" class="secondary">Siradaki Fis</button>
+            </div>
+
+            <p id="status">Hazir.</p>
+            <p class="session">Bu oturumda islenen fis sayisi: <strong id="counter">0</strong></p>
+          </div>
+
+          <div>
+            <div class="money-grid">
+              <div class="money-card">
+                <div class="money-label">Toplam</div>
+                <div class="money-value total" id="moneyTotal">-</div>
+              </div>
+              <div class="money-card">
+                <div class="money-label">KDV</div>
+                <div class="money-value" id="moneyKdv">-</div>
+              </div>
+              <div class="money-card">
+                <div class="money-label">Net</div>
+                <div class="money-value" id="moneyNet">-</div>
+              </div>
+              <div class="money-card">
+                <div class="money-label">KDV %</div>
+                <div class="money-value" id="moneyRate">-</div>
+              </div>
+            </div>
+
+            <div class="meta">
+              <div class="meta-item">Isletme: <strong id="mMerchant">-</strong></div>
+              <div class="meta-item">Evrak No: <strong id="mEvrakNo">-</strong></div>
+              <div class="meta-item">Tarih/Saat: <strong id="mDateTime">-</strong></div>
+              <div class="meta-item">Excel Satiri: <strong id="mExcelRow">-</strong></div>
+            </div>
+
+            <details>
+              <summary>Detay Alanlari</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Kod</th>
+                      <th>Hesap Kodu</th>
+                      <th>Evrak Tarihi</th>
+                      <th>Evrak No</th>
+                      <th>Vergi / TC No</th>
+                      <th>Gider Aciklama</th>
+                      <th>KDV%</th>
+                      <th>Alinan Mal/Masraf</th>
+                      <th>Ind.KDV</th>
+                      <th>Toplam</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td id="r_kod">-</td>
+                      <td id="r_hesap_kodu">-</td>
+                      <td id="r_evrak_tarihi">-</td>
+                      <td id="r_evrak_no">-</td>
+                      <td id="r_vergi_tc_no">-</td>
+                      <td id="r_gider_aciklama">-</td>
+                      <td id="r_kdv_orani">-</td>
+                      <td id="r_alinan_mal_masraf">-</td>
+                      <td id="r_ind_kdv">-</td>
+                      <td id="r_toplam">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <pre id="rawText"></pre>
+            </details>
+          </div>
+        </div>
+
+        <canvas id="canvas"></canvas>
+      </section>
+    </main>
+
+    <script>
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const startBtn = document.getElementById("startBtn");
+      const captureBtn = document.getElementById("captureBtn");
+      const autoBtn = document.getElementById("autoBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const statusEl = document.getElementById("status");
+      const counterEl = document.getElementById("counter");
+
+      const rowKeys = [
+        "kod",
+        "hesap_kodu",
+        "evrak_tarihi",
+        "evrak_no",
+        "vergi_tc_no",
+        "gider_aciklama",
+        "kdv_orani",
+        "alinan_mal_masraf",
+        "ind_kdv",
+        "toplam",
+      ];
+
+      let stream = null;
+      let processedCount = 0;
+      let busy = false;
+      let autoMode = false;
+      let autoTimer = null;
+
+      startBtn.addEventListener("click", async () => {
+        await startCamera();
+      });
+
+      captureBtn.addEventListener("click", async () => {
+        await captureAndAnalyze(false);
+      });
+
+      autoBtn.addEventListener("click", async () => {
+        if (autoMode) {
+          autoMode = false;
+          clearTimeout(autoTimer);
+          autoBtn.textContent = "Otomatik Kapali";
+          setStatus("Otomatik cekim kapatildi.");
+          return;
+        }
+
+        await startCamera();
+        if (!stream) {
+          autoMode = false;
+          autoBtn.textContent = "Otomatik Kapali";
+          setStatus("Otomatik cekim icin canli kamera acilmali.", true);
+          return;
+        }
+        autoMode = true;
+        autoBtn.textContent = "Otomatik Acik";
+        setStatus("Otomatik cekim acildi. Her 2.2 sn bir fis alinir.");
+        scheduleAuto();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        setStatus("Siradaki fis hazir. Fisi kilavuz kutuya getir.");
+      });
+
+      window.addEventListener("beforeunload", () => {
+        stopCamera();
+      });
+
+      (async () => {
+        await startCamera();
+      })();
+
+      async function startCamera() {
+        if (stream) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus("Kamera desteklenmiyor. Telefon tarayicisini guncelle.", true);
+          return;
+        }
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+            audio: false,
+          });
+          video.srcObject = stream;
+          await video.play();
+          setStatus("Kamera hazir. Fisi kilavuz kutuya ortala.");
+        } catch (error) {
+          setStatus(`Canli kamera acilamadi (${error.message}). Kamera iznini kontrol et.`, true);
+        }
+      }
+
+      function stopCamera() {
+        if (!stream) return;
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+        stream = null;
+      }
+
+      function scheduleAuto() {
+        clearTimeout(autoTimer);
+        if (!autoMode) return;
+        autoTimer = setTimeout(async () => {
+          await captureAndAnalyze(true);
+        }, 2200);
+      }
+
+      async function captureAndAnalyze(fromAuto) {
+        if (busy) return;
+        if (!stream) {
+          await startCamera();
+          if (!stream) {
+            setStatus("Canli kamera acilmadi. Kamera iznini verip tekrar dene.", true);
+            return;
+          }
+        }
+
+        busy = true;
+        captureBtn.disabled = true;
+        setStatus("Fis cekiliyor ve analiz ediliyor...");
+
+        try {
+          const blob = await captureReceiptBlob();
+          await uploadBlob(blob, fromAuto);
+        } catch (error) {
+          setStatus(`Hata: ${error.message}`, true);
+        } finally {
+          busy = false;
+          captureBtn.disabled = false;
+          if (autoMode && fromAuto !== false) {
+            scheduleAuto();
+          }
+        }
+      }
+
+      async function uploadBlob(blobOrFile, fromAuto) {
+        const formData = new FormData();
+        formData.append("file", blobOrFile, `receipt-${Date.now()}.jpg`);
+
+        const response = await fetch("/api/upload-receipt", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Sunucu hatasi");
+        }
+
+        fillTemplateRow(data.template_row || {});
+        fillMoney(data.template_row || {}, data.parsed || {});
+
+        document.getElementById("mMerchant").textContent = data.parsed?.merchant || "-";
+        document.getElementById("mEvrakNo").textContent = data.template_row?.evrak_no || "-";
+        document.getElementById("mDateTime").textContent = `${data.template_row?.evrak_tarihi || "-"} ${data.parsed?.time || ""}`.trim();
+        document.getElementById("mExcelRow").textContent = String(data.excel_row ?? "-");
+        document.getElementById("rawText").textContent = data.raw_text_preview || "-";
+
+        processedCount += 1;
+        counterEl.textContent = String(processedCount);
+        if (navigator.vibrate) navigator.vibrate([90, 50, 90]);
+
+        if (fromAuto) {
+          setStatus("Islendi (otomatik). Siradaki fis icin bekleniyor...");
+        } else {
+          setStatus("Islendi. Siradaki fisi kutuya getir.");
+        }
+      }
+
+      async function captureReceiptBlob() {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+
+        if (!vw || !vh) {
+          throw new Error("Kamera goruntusu hazir degil");
+        }
+
+        const cropW = Math.floor(vw * 0.78);
+        const cropH = Math.floor(vh * 0.9);
+        const sx = Math.floor((vw - cropW) / 2);
+        const sy = Math.floor((vh - cropH) / 2);
+
+        canvas.width = cropW;
+        canvas.height = cropH;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+
+        return new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error("Gorsel olusturulamadi"));
+                return;
+              }
+              resolve(blob);
+            },
+            "image/jpeg",
+            0.95
+          );
+        });
+      }
+
+      function fillTemplateRow(templateRow) {
+        for (const key of rowKeys) {
+          const el = document.getElementById(`r_${key}`);
+          if (!el) continue;
+          el.textContent = formatCell(key, templateRow[key]);
+        }
+      }
+
+      function fillMoney(templateRow, parsed) {
+        document.getElementById("moneyTotal").textContent = formatMoney(templateRow.toplam);
+        document.getElementById("moneyKdv").textContent = formatMoney(templateRow.ind_kdv);
+        document.getElementById("moneyNet").textContent = formatMoney(templateRow.alinan_mal_masraf);
+        document.getElementById("moneyRate").textContent = formatRate(templateRow.kdv_orani || parsed.vat_rate);
+      }
+
+      function formatMoney(value) {
+        if (value === null || value === undefined || value === "") return "-";
+        const num = Number(value);
+        if (Number.isNaN(num)) return "-";
+        return `${num.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`;
+      }
+
+      function formatRate(value) {
+        if (value === null || value === undefined || value === "") return "-";
+        const num = Number(value);
+        if (Number.isNaN(num)) return "-";
+        return `%${num.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+      }
+
+      function formatCell(key, value) {
+        if (value === null || value === undefined || value === "") return "-";
+        if (["alinan_mal_masraf", "ind_kdv", "toplam"].includes(key)) {
+          const num = Number(value);
+          if (!Number.isNaN(num)) {
+            return num.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
+        }
+        if (key === "kdv_orani") {
+          const num = Number(value);
+          if (!Number.isNaN(num)) {
+            return num.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          }
+        }
+        return String(value);
+      }
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.classList.toggle("error", isError);
+      }
+    </script>
+  </body>
+</html>

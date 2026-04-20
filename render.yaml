@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: receiper-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    plan: free
+    envVars:
+      - key: APP_NAME
+        value: Receiper Cloud
+      - key: APP_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "43200"
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: PAIRING_TTL_MINUTES
+        value: "5"
+      - key: OCR_LANG
+        value: tur+eng
+      - key: TESSERACT_CMD
+        value: /usr/bin/tesseract
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/5/tessdata
+      - key: DATABASE_URL
+        fromDatabase:
+          name: receiper-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+databases:
+  - name: receiper-db
+    plan: free
+    databaseName: receiper
+    user: receiper
+

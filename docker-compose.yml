@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: receiper-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: receiper
+      POSTGRES_USER: receiper
+      POSTGRES_PASSWORD: receiper123
+    ports:
+      - "5432:5432"
+    volumes:
+      - receiper_pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: receiper-api
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      APP_NAME: Receiper Cloud
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg2://receiper:receiper123@db:5432/receiper
+      JWT_SECRET: dev-change-me
+      ACCESS_TOKEN_EXPIRE_MINUTES: 43200
+      ALLOWED_ORIGINS: http://localhost:8000,http://localhost:3000,*
+      UPLOAD_ROOT: /app/data/uploads
+      MAX_UPLOAD_MB: 10
+      PAIRING_TTL_MINUTES: 5
+      DASHBOARD_BASE_URL: http://localhost:8000
+      OCR_LANG: tur+eng
+      TESSERACT_CMD: /usr/bin/tesseract
+      TESSDATA_PREFIX: /usr/share/tesseract-ocr/5/tessdata
+    ports:
+      - "8000:10000"
+    volumes:
+      - receiper_uploads:/app/data
+
+volumes:
+  receiper_pgdata:
+  receiper_uploads:
+
