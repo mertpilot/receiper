@@ -55,9 +55,12 @@ public class MainActivity extends AppCompatActivity {
     private static final String MOBILE_UPLOAD_PATH = "/api/mobile/receipts";
     private static final int CAMERA_PERMISSION_REQ = 5011;
     private static final int MAX_CONNECT_ATTEMPTS = 3;
+    private static final int MAX_UPLOAD_ATTEMPTS = 3;
     private static final int TARGET_UPLOAD_EDGE = 1800;
     private static final int INITIAL_JPEG_QUALITY = 88;
     private static final long MAX_UPLOAD_IMAGE_BYTES = 1_700_000L;
+    private static final int UPLOAD_CONNECT_TIMEOUT_MS = 30_000;
+    private static final int UPLOAD_READ_TIMEOUT_MS = 180_000;
 
     private LinearLayout loadingScreen;
     private LinearLayout loginScreen;
@@ -283,32 +286,70 @@ public class MainActivity extends AppCompatActivity {
                 deleteAfterUpload = false;
             }
 
-            mainHandler.post(() -> setScanStatus("Fiş gönderiliyor...", false));
-            HttpResult result = httpPostMultipartImage(MOBILE_UPLOAD_PATH, token, uploadFile);
+            HttpResult result = new HttpResult(-1, "");
+            for (int attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+                int currentAttempt = attempt;
+                mainHandler.post(() -> setScanStatus(
+                        "Fiş gönderiliyor... (" + currentAttempt + "/" + MAX_UPLOAD_ATTEMPTS + ")",
+                        false
+                ));
+                result = httpPostMultipartImage(
+                        MOBILE_UPLOAD_PATH,
+                        token,
+                        uploadFile,
+                        UPLOAD_CONNECT_TIMEOUT_MS,
+                        UPLOAD_READ_TIMEOUT_MS
+                );
+                if (!shouldRetryUpload(result, attempt)) {
+                    break;
+                }
+                try {
+                    Thread.sleep(1300L * attempt);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
 
             if (deleteAfterUpload) {
-                // Temporary optimized file is not needed after upload.
                 uploadFile.delete();
             }
 
+            HttpResult finalResult = result;
             mainHandler.post(() -> {
                 setScanBusy(false);
 
-                if (result.code >= 200 && result.code < 300) {
-                    setScanStatus(buildUploadSuccessMessage(result.body), false);
+                if (finalResult.code >= 200 && finalResult.code < 300) {
+                    setScanStatus(buildUploadSuccessMessage(finalResult.body), false);
                     return;
                 }
 
-                if (result.code == 401) {
+                if (finalResult.code == 401) {
                     clearStoredToken();
                     showLoginScreen();
                     setLoginStatus("Oturum süresi doldu, tekrar giriş yap.", true);
                     return;
                 }
 
-                setScanStatus(extractErrorMessage(result.body, "Gönderim başarısız."), true);
+                setScanStatus(extractErrorMessage(finalResult.body, "Gönderim başarısız."), true);
             });
         });
+    }
+
+    private boolean shouldRetryUpload(HttpResult result, int attempt) {
+        if (attempt >= MAX_UPLOAD_ATTEMPTS) {
+            return false;
+        }
+
+        if (result.code == 401) {
+            return false;
+        }
+
+        if (result.code >= 400 && result.code < 500 && result.code != 429) {
+            return false;
+        }
+
+        return true;
     }
 
     private String buildUploadSuccessMessage(String body) {
@@ -491,15 +532,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private HttpResult httpPostMultipartImage(String path, String token, File imageFile) {
+    private HttpResult httpPostMultipartImage(
+            String path,
+            String token,
+            File imageFile,
+            int connectTimeoutMs,
+            int readTimeoutMs
+    ) {
         HttpURLConnection conn = null;
         String boundary = "----ReceiperBoundary" + System.currentTimeMillis();
         try {
             URL url = new URL(BASE_URL + path);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(65000);
+            conn.setConnectTimeout(connectTimeoutMs);
+            conn.setReadTimeout(readTimeoutMs);
             conn.setDoOutput(true);
             conn.setRequestProperty("Authorization", "Bearer " + token);
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);

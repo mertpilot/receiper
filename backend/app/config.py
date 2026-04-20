@@ -24,6 +24,18 @@ class Settings:
     gemini_timeout_seconds: int
 
 
+def _validate_settings(settings: Settings) -> None:
+    env = (settings.environment or "").strip().lower()
+    is_production = env in {"production", "prod"}
+    db = (settings.database_url or "").strip().lower()
+
+    if is_production and (not db or db.startswith("sqlite:///")):
+        raise RuntimeError(
+            "Production ortaminda kalici bir veritabani zorunlu. "
+            "Lutfen Render'da DATABASE_URL degerini PostgreSQL olarak ayarlayin."
+        )
+
+
 def _normalize_database_url(url: str) -> str:
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+psycopg2://", 1)
@@ -46,7 +58,7 @@ def get_settings() -> Settings:
     if not origins:
         origins = ["*"]
 
-    return Settings(
+    settings = Settings(
         app_name=os.getenv("APP_NAME", "Receiper Cloud"),
         environment=os.getenv("APP_ENV", "development"),
         database_url=_normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./data/receiper.db")),
@@ -63,3 +75,5 @@ def get_settings() -> Settings:
         gemini_fallback_enabled=_as_bool(os.getenv("GEMINI_FALLBACK_ENABLED", "true"), default=True),
         gemini_timeout_seconds=int(os.getenv("GEMINI_TIMEOUT_SECONDS", "16")),
     )
+    _validate_settings(settings)
+    return settings

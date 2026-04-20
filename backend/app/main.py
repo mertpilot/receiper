@@ -58,11 +58,14 @@ def mobile_test():
 
 @app.get("/health")
 def health():
+    database_url = settings.database_url or ""
+    db_mode = "sqlite" if database_url.startswith("sqlite") else "postgres"
     return JSONResponse(
         {
             "status": "ok",
             "service": settings.app_name,
             "env": settings.environment,
+            "db_mode": db_mode,
             "time_utc": datetime.now(timezone.utc).isoformat(),
         }
     )
